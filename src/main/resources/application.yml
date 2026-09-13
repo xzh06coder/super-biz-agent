@@ -1,0 +1,52 @@
+server:
+  port: 9900
+
+spring:
+  ai:
+    dashscope:
+      # 从环境变量读取，本机没配就是空（阶段2 才真正用到）
+      api-key: ${DASHSCOPE_API_KEY:}
+      chat:
+        options:
+          timeout: 180000
+    mcp:
+      client:
+        # 阶段3 再打开；现在关掉，启动更快也少一个失败点
+        enabled: false
+
+milvus:
+  host: localhost
+  port: 19530
+  username: ""
+  password: ""
+  database: default
+  timeout: 10000
+
+# 原生 DashScope SDK 用的 Key（阶段4 向量化用）
+dashscope:
+  api:
+    key: ${DASHSCOPE_API_KEY:}
+  embedding:
+    model: text-embedding-v4
+
+file:
+  upload:
+    path: ./uploads
+    allowed-extensions: txt,md
+
+document:
+  chunk:
+    max-size: 800
+    overlap: 100
+
+rag:
+  top-k: 3
+  model: qwen3-max
+
+prometheus:
+  base-url: http://localhost:9090
+  timeout: 10
+  mock-enabled: true
+
+cls:
+  mock-enabled: true
