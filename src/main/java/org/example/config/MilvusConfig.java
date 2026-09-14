@@ -32,19 +32,26 @@ public class MilvusConfig {
      */
     @Bean
     public MilvusServiceClient milvusServiceClient() {
-        // TODO 1: 调用 milvusClientFactory.createClient() 创建客户端，
-        //         把结果同时赋值给上面那个 milvusClient 字段（为什么？看 TODO 3）
-        // TODO 2: 打一行日志，然后 return 这个客户端
-        throw new UnsupportedOperationException();
+        // 1: 调用 milvusClientFactory.createClient() 创建客户端，
+        //         把结果同时赋值给上面那个 milvusClient 字段（为什么？看 3）
+        logger.info("开始初始化milvus客户端");
+        milvusClient = milvusClientFactory.createClient();
+        // 2: 打一行日志，然后 return 这个客户端
+        logger.info("milvus客户端初始化成功");
+        return milvusClient;
     }
 
     /**
      * 应用关闭时的钩子
-     * TODO 3: milvusClient 不为 null 时调用 close() 并打日志。
+     * 3: milvusClient 不为 null 时调用 close() 并打日志。
      *         思考题：如果不 close 会怎样？为什么要专门把客户端存到字段里？
      */
     @PreDestroy
     public void cleanup() {
-        throw new UnsupportedOperationException();
+        if (milvusClient != null) {
+            logger.info("开始关闭milvus客户端连接");
+            milvusClient.close();
+            logger.info("milvus客户端关闭成功");
+        }
     }
 }

@@ -34,22 +34,39 @@ public class MilvusCheckController {
     public ResponseEntity<Map<String, Object>> simpleHealth() {
         Map<String, Object> result = new HashMap<>();
 
-        // TODO 1: 调用 milvusClient.showCollections(...) 列出所有集合
+        //  1: 调用 milvusClient.showCollections(...) 列出所有集合
         //         参数用 ShowCollectionsParam.newBuilder().build()
         //         返回值类型是 R<ShowCollectionsResponse>，R 是 Milvus SDK 的统一返回包装
-        //
-        // TODO 2: 判断 response.getStatus() == 0 表示成功，此时：
-        //           result.put("message", "ok");
-        //           result.put("collections", response.getData().getCollectionNamesList());
-        //           return ResponseEntity.ok(result);
-        //
-        // TODO 3: status 不为 0 说明 Milvus 返回了错误：
-        //           把 response.getMessage() 放进 result，用 ResponseEntity.status(503).body(result) 返回
-        //
-        // TODO 4: 整段代码用 try/catch(Exception e) 包住。
-        //         Milvus 没启动时这里会抛异常（连不上），要把 e.getMessage() 放进 result 并返回 503。
-        //         思考题：为什么健康检查接口不能把异常直接抛出去（让 Spring 返回 500）？
+        try {
+            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder().build());
 
-        throw new UnsupportedOperationException();
+            //
+            //  2: 判断 response.getStatus() == 0 表示成功，此时：
+            //           result.put("message", "ok");
+            //           result.put("collections", response.getData().getCollectionNamesList());
+            //           return ResponseEntity.ok(result);
+            if (response.getStatus() == 0) {
+                result.put("message", "ok");
+                result.put("collections", response.getData().getCollectionNamesList());
+                return ResponseEntity.ok(result);
+                //  3: status 不为 0 说明 Milvus 返回了错误：
+                //           把 response.getMessage() 放进 result，用 ResponseEntity.status(503).body(result) 返回
+                //
+            } else {
+                result.put("message", response.getMessage());
+                return ResponseEntity.status(503).body(result);
+            }
+            // ③ Milvus 进程挂了 / 网络不通时走这里
+        } catch (Exception e) {
+            result.put("error", e.getMessage());
+            return ResponseEntity.status(503).body(result);
+
+
+
+            //  4: 整段代码用 try/catch(Exception e) 包住。
+            //         Milvus 没启动时这里会抛异常（连不上），要把 e.getMessage() 放进 result 并返回 503。
+            //         思考题：为什么健康检查接口不能把异常直接抛出去（让 Spring 返回 500）？
+        }
     }
+
 }
