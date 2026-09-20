@@ -83,51 +83,86 @@ public class VectorEmbeddingService {
      * ★ 性能关键：一次 HTTP 请求处理 N 条文本
      *   如果循环调用单条接口，7 个分片就是 7 次网络往返（每次几十~几百毫秒）
      */
+    /**
+     * ★ DashScope text-embedding-v4 的硬限制：单次请求最多 10 条文本
+     *   超了会报 400 InternalError.Algo.InvalidParameter: batch size is invalid
+     *   注意：这个数字是模型相关的，换模型要重新确认
+     */
+    private static final int MAX_BATCH_SIZE = 10;
+
+    /**
+     * 批量向量化（自动分批）
+     *
+     * 为什么不直接一次全提交？—— 见上面的 MAX_BATCH_SIZE 注释，API 有上限
+     */
     public List<List<Float>> generateEmbeddings(List<String> contents) {
-        // 空输入直接返回空列表，不发请求
+        // 空输入直接返回，不发请求
         if (contents == null || contents.isEmpty()) {
             return Collections.emptyList();
         }
 
+        // 按入参顺序累积结果
+        List<List<Float>> allVectors = new ArrayList<>(contents.size());
+
+        // ★ 分批循环：start 每次前进 10
+        //   假设 35 条 → start 依次是 0, 10, 20, 30
+        for (int start = 0; start < contents.size(); start += MAX_BATCH_SIZE) {
+
+            // end 取"start+10"和"总数"的较小值
+            // 最后一批可能不足 10 条（比如 35 → 最后一批只有 5 条）
+            int end = Math.min(start + MAX_BATCH_SIZE, contents.size());
+
+            // subList 取 [start, end) 区间（左闭右开）
+            // 注意：它返回的是原列表的"视图"而不是拷贝，只读使用没问题
+            List<String> batch = contents.subList(start, end);
+
+            logger.info("向量化批次 [{}, {})，本批 {} 条", start, end, batch.size());
+
+            // 调一次 API，拿这一批的结果
+            List<List<Float>> batchVectors = callEmbeddingApi(batch);
+
+            // 逐批追加 —— 这样最终顺序必然和入参一致
+            allVectors.addAll(batchVectors);
+        }
+
+        logger.info("全部向量化完成，共 {} 条", allVectors.size());
+        return allVectors;
+    }
+    /**
+     * 真正调用 DashScope 的那一层（单批，不超过 10 条）
+     * 把"分批逻辑"和"API 调用"拆开，各管一件事
+     */
+    private List<List<Float>> callEmbeddingApi(List<String> batch) {
         try {
-            // 构建请求参数：指定模型 + 要向量化的文本列表
             TextEmbeddingParam param = TextEmbeddingParam.builder()
                     .model(model)
-                    .texts(contents)
+                    .texts(batch)
                     .build();
 
-            // 发起调用（同步阻塞，直到拿到全部结果）
             TextEmbeddingResult response = textEmbedding.call(param);
 
-            // 逐层判空：SDK 返回的结构是 response -> output -> embeddings，任何一层都可能为 null
+            // 逐层判空
             if (response == null
                     || response.getOutput() == null
                     || response.getOutput().getEmbeddings() == null) {
                 throw new RuntimeException("DashScope 返回空结果");
             }
 
-            // SDK 返回的是 List<Double>，我们要的是 List<Float>
-            // 原因：Milvus 的 FloatVector 字段要求的元素类型是 float
+            // Double → Float 转换
             List<List<Float>> vectors = new ArrayList<>();
             for (TextEmbeddingResultItem item : response.getOutput().getEmbeddings()) {
                 List<Double> doubles = item.getEmbedding();
-                // 提前指定容量，避免 ArrayList 反复扩容
                 List<Float> floats = new ArrayList<>(doubles.size());
                 for (Double d : doubles) {
-                    // Double → Float 要显式转换，直接赋值编译不过
                     floats.add(d.floatValue());
                 }
                 vectors.add(floats);
             }
-
-            logger.info("向量化完成，共 {} 条，维度 {}",
-                    vectors.size(), vectors.isEmpty() ? 0 : vectors.get(0).size());
             return vectors;
 
         } catch (Exception e) {
-            // 统一包一层异常，往上抛出带上下文的错误信息（原始异常放进 cause，不丢堆栈）
-            logger.error("向量化失败", e);
-            throw new RuntimeException("向量化失败: " + e.getMessage(), e);
+            logger.error("批量向量化失败，本批 {} 条", batch.size(), e);
+            throw new RuntimeException("批量向量化失败: " + e.getMessage(), e);
         }
     }
 }
