@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
+
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,7 +26,7 @@ public class SessionManager {
     });
   }
   public SessionInfo get(String sessionId) {
-    return  sessions==null?null:sessions.get(sessionId);
+    return  sessionId==null?null:sessions.get(sessionId);
   }
   public int  getSessionCount() {//获取当前会话数量
     return sessions.size();
